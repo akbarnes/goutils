@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/sha256"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -14,15 +15,45 @@ func check(e error) {
 	}
 }
 
+var TimeStampMode bool
+var NumChars int
+
+func init() {
+	flag.BoolVar(&TimeStampMode, "t", false, "prefix with time stamp")
+	flag.IntVar(&NumChars, "n", 64, "number of characters to print")
+
+}
+
 func main() {
+	flag.Parse()
+
+	var data []byte
+	var err error
+
 	// Optional timestamp
 	t := time.Now()
 
-	fmt.Printf("File: %s\n", os.Args[1])
-	fmt.Println(t.Format("2006-01-02T15-04-05"))
+	if TimeStampMode {
+		fmt.Print(t.Format("2006-01-02T15-04-05-"))
+	}
 
-	data, err := ioutil.ReadFile(os.Args[1])
-	check(err)
-	sum := sha256.Sum256(data)
-	fmt.Printf("%x", sum)
+	if flag.NArg() >= 1 {
+		FileName := flag.Arg(1)
+		data, err = ioutil.ReadFile(FileName)
+
+		if err != nil {
+			panic("Could not read file " + FileName)
+		}
+	} else {
+		data, err = ioutil.ReadAll(os.Stdin)
+		check(err)
+	}
+
+	sum := fmt.Sprintf("%x", sha256.Sum256(data))
+
+	if len(sum) < NumChars || NumChars < 0 {
+		NumChars = len(sum)
+	}
+
+	fmt.Printf("%s\n", sum[0:NumChars])
 }
