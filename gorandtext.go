@@ -4,14 +4,12 @@ import (
 	"flag"
 	"fmt"
 	"math/rand"
-	"strconv"
-	"strings"
 	"time"
 )
 
 var FileName string
-var NumRows bool
-var NumCols bool
+var NumRows int
+var NumCols int
 
 var DecMode bool
 var AlphaMode bool
@@ -25,22 +23,12 @@ const DecChars = "0123456789"
 const HexChars = DecChars + "abcdef"
 const AlphaNumChars = DecChars + "abcdefghijklmnopqrstuvwxyz"
 const MixedCaseChars = AlphaNumChars + "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
-func RandDecString(length int) string {
-	return RandString(length, DecChars)
-}
-
-func RandHexString(length int) string {
-	return RandString(length, HexChars)
-}
-
-
+const UpperCaseHexChars = DecChars + "ABCDEF"
+const UpperCaseAlphaNumChars = AlphaNumChars + "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 // Given a filename, create a random text file 
 // with the specified number of lines and column width
-func WriteRandomText(f *os.File, numLines int, numCols int, charset string) {
-	w := bufio.NewWriter(f)
-
+func WriteRandomText(numLines int, numCols int, charset string) {
 	b := make([]byte, numCols)
 
 	for r := 0; r < numLines; r += 1 {
@@ -48,16 +36,13 @@ func WriteRandomText(f *os.File, numLines int, numCols int, charset string) {
 			b[c] = charset[seededRand.Intn(len(charset))]
 		}
 
-		fmt.Fprintf(w, "%s\n", b)
+		fmt.Printf("%s\n", b)
 	}
-
-	w.Flush()
 }
 
 func init() {
-	flag.StringVar(&FileName), "file", nil, "output filename")
-	flag.IntVar(&NumRows), "rows", 16, "number rows to output")
-	flag.IntVar(&NumCols), "cols", 64, "number of columns to output")
+	flag.IntVar(&NumRows, "rows", 16, "number rows to output")
+	flag.IntVar(&NumCols, "cols", 64, "number of columns to output")
 
 	flag.BoolVar(&DecMode, "dec", false, "enable decimal output")
 	flag.BoolVar(&AlphaMode, "alpha", false, "enable alphanumeric output")
@@ -68,32 +53,23 @@ func init() {
 
 func main() {
 	flag.Parse()
-	var randStr string
-	NumChars := 16
-
-	if flag.NArg() >= 1 {
-		x, err := strconv.Atoi(flag.Arg(0))
-
-		if err != nil {
-			panic("Invalid string length " + flag.Arg(0))
-		}
-
-		NumChars = x
-	}
 
 	if DecMode {
-		randStr = RandDecString(NumChars)
+		WriteRandomText(NumRows, NumCols, DecChars)
 	} else if AlphaMode {
-		randStr = RandString(NumChars, AlphaNumChars)
+		if UpperCaseMode {
+			WriteRandomText(NumRows, NumCols, UpperCaseAlphaNumChars)
+		} else {
+			WriteRandomText(NumRows, NumCols, AlphaNumChars)
+		}
 	} else if MixedMode {
-		randStr = RandString(NumChars, MixedCaseChars)
+		WriteRandomText(NumRows, NumCols, MixedCaseChars)
 	} else {
-		randStr = RandHexString(NumChars)
-	}
-
-	if UpperCaseMode {
-		fmt.Println(strings.ToUpper(randStr))
-	} else {
-		fmt.Println(randStr)
-	}
+		if UpperCaseMode {
+			WriteRandomText(NumRows, NumCols, UpperCaseHexChars)
+		} else {
+			WriteRandomText(NumRows, NumCols, HexChars)
+		}
+	} 
 }
+
