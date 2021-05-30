@@ -9,6 +9,7 @@ import (
 	"time"
 )
 
+var GroupSize int
 var NumChars int
 var DecMode bool
 var AlphaMode bool
@@ -46,7 +47,7 @@ func init() {
 	flag.BoolVar(&AlphaMode, "alpha", false, "enable alphanumeric output")
 	flag.BoolVar(&MixedMode, "mixed", false, "enable mixed-case alphanumeric output")
 	flag.BoolVar(&UpperCaseMode, "upper", false, "use only upper-case characters")
-
+	flag.IntVar(&GroupSize, "group", 4, "group size when splitting with dashes")
 }
 
 func main() {
@@ -74,9 +75,19 @@ func main() {
 		randStr = RandHexString(NumChars)
 	}
 
+
+
 	if UpperCaseMode {
-		fmt.Println(strings.ToUpper(randStr))
-	} else {
-		fmt.Println(randStr)
+		randStr = strings.ToUpper(randStr)
 	}
+
+	for i, c := range randStr {
+		fmt.Printf("%c", c)
+
+		if i < len(randStr) - 1 && GroupSize > 0 && (i + 1) % GroupSize == 0 {
+			fmt.Printf("-")
+		}
+	}
+
+	fmt.Println("")
 }
