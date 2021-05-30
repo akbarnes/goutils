@@ -27,3 +27,12 @@ Resistor color code calculator
 
 ## GoHash
 Calculate the SHA256 hash of a file
+
+## GoRand
+Print a random text string 
+
+## GoRandText
+Create a random text file
+
+# TODO
+- Add diff program
