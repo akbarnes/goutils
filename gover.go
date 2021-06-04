@@ -122,15 +122,14 @@ func PrintJson(a interface{}) {
 }
 
 var LogCommand bool
-var CheckoutSnapshot string
+var CheckoutSnapshot bool
 var Json bool
 var Message string
 
 func init() {
 	flag.BoolVar(&LogCommand, "log", false, "list snapshots")
-	flag.BoolVar(&LogCommand, "l", false, "list snapshots")
-	flag.StringVar(&CheckoutSnapshot, "checkout", "","checkout snapshot")
-	flag.StringVar(&CheckoutSnapshot, "co", "","checkout snapshot")
+	flag.BoolVar(&CheckoutSnapshot, "checkout", false,"checkout snapshot")
+	flag.BoolVar(&CheckoutSnapshot, "co", false,"checkout snapshot")
 	flag.BoolVar(&Json, "json", false, "print json")
 	flag.BoolVar(&Json, "j", false, "print json")
 	flag.StringVar(&Message, "msg", "", "commit message")
@@ -209,16 +208,17 @@ func main() {
 				}
 			}
 		}
-	} else if len(CheckoutSnapshot) > 0 {
-		fmt.Printf("Checking out %s\n", CheckoutSnapshot)
-		snapshotPath := filepath.Join(".gover","snapshots", CheckoutSnapshot+".json")
+	} else if CheckoutSnapshot && flag.NArg() >= 1 {
+		snapId := flag.Arg(0)
+		fmt.Printf("Checking out %s\n", snapId)
+		snapshotPath := filepath.Join(".gover","snapshots", snapId+".json")
 		fmt.Printf("Reading %s\n", snapshotPath)
 		snap := ReadSnapshotFile(snapshotPath)
 
-		os.Mkdir(CheckoutSnapshot, 0777)
+		os.Mkdir(snapId, 0777)
 
 		for i, file := range snap.Files {
-			outFile := filepath.Join(CheckoutSnapshot, file)
+			outFile := filepath.Join(snapId, file)
 			storedFile := snap.StoredFiles[i]
 			fmt.Printf("Restoring %s to %s\n", storedFile, outFile)
 			CopyFile(storedFile, outFile)
