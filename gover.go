@@ -22,6 +22,7 @@ func check(e error) {
 var seededRand *rand.Rand = rand.New(
 	rand.NewSource(time.Now().UnixNano()))
   
+const NumChars = 40
 const HexChars = "0123456789abcdef"
 
 // Return a random string of specified length with hexadecimal characters
@@ -123,14 +124,16 @@ func PrintJson(a interface{}) {
 var LogCommand bool
 var CheckoutSnapshot string
 var Json bool
-var NumChars int
 var Message string
 
 func init() {
 	flag.BoolVar(&LogCommand, "log", false, "list snapshots")
+	flag.BoolVar(&LogCommand, "l", false, "list snapshots")
 	flag.StringVar(&CheckoutSnapshot, "checkout", "","checkout snapshot")
+	flag.StringVar(&CheckoutSnapshot, "co", "","checkout snapshot")
 	flag.BoolVar(&Json, "json", false, "print json")
-	flag.IntVar(&NumChars, "n", 40, "number of characters to print")
+	flag.BoolVar(&Json, "j", false, "print json")
+	flag.StringVar(&Message, "msg", "", "commit message")
 	flag.StringVar(&Message, "m", "", "commit message")
 }
 
@@ -171,18 +174,39 @@ func main() {
 				}		
 			}	
 		} else {
-			snapshotGlob := filepath.Join(".gover","snapshots","*.json")
-			snapshotPaths, err := filepath.Glob(snapshotGlob)
-			check(err)
+			if Json {
+				type Snap struct {
+					Time string
+					Message string
+				}
 
-			for _, snapshotPath := range snapshotPaths {
-				snap := ReadSnapshotFile(snapshotPath)
+				snaps := []Snap{}
+				
+				snapshotGlob := filepath.Join(".gover","snapshots","*.json")
+				snapshotPaths, err := filepath.Glob(snapshotGlob)
+				check(err)
 
-				// ID: 943e8daa (943e8daa4bc0ab899c36b5030d4a27a6b833b2ba)
-				// Time: 2021/05/08 08:57:46
-				// Message: specify workdir path explicitly
-				fmt.Printf("Time: %s\nMessage: %s\n", snap.Time, snap.Message)
-				fmt.Println("")
+				for _, snapshotPath := range snapshotPaths {
+					snapshot := ReadSnapshotFile(snapshotPath)
+					snap := Snap{Time: snapshot.Time, Message: snapshot.Message}
+					snaps = append(snaps, snap)
+				}
+
+				PrintJson(snaps)
+			} else {
+				snapshotGlob := filepath.Join(".gover","snapshots","*.json")
+				snapshotPaths, err := filepath.Glob(snapshotGlob)
+				check(err)
+
+				for _, snapshotPath := range snapshotPaths {
+					snap := ReadSnapshotFile(snapshotPath)
+
+					// ID: 943e8daa (943e8daa4bc0ab899c36b5030d4a27a6b833b2ba)
+					// Time: 2021/05/08 08:57:46
+					// Message: specify workdir path explicitly
+					fmt.Printf("Time: %s\nMessage: %s\n", snap.Time, snap.Message)
+					fmt.Println("")
+				}
 			}
 		}
 	} else if len(CheckoutSnapshot) > 0 {
