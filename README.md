@@ -53,6 +53,6 @@ To list the files in a particular snapshot:
 This takes an optional argument to specify an output folder. To checkout a snapshot:
 `gover -checkout snapshot_time`
 `gover -co snapshot_time`
-`gover -co snapshot_time -out output_folder`
-`gover -co snapshot_time -o output_folder`
+`gover -out output_folder -co snapshot_time`
+`gover -o output_folder -co snapshot_time`
 

@@ -126,6 +126,7 @@ var CheckoutSnapshot bool
 var Json bool
 var Message string
 var Commit bool
+var OutputFolder string
 
 func init() {
 	flag.BoolVar(&LogCommand, "log", false, "list snapshots")
@@ -137,6 +138,8 @@ func init() {
 	flag.BoolVar(&Json, "j", false, "print json")
 	flag.StringVar(&Message, "msg", "", "commit message")
 	flag.StringVar(&Message, "m", "", "commit message")
+	flag.StringVar(&OutputFolder, "out", "", "output folder")
+	flag.StringVar(&OutputFolder, "o", "", "output folder")	
 }
 
 type Snapshot struct {
@@ -211,12 +214,11 @@ func main() {
 				}
 			}
 		}
-	} else if CheckoutSnapshot && flag.NArg() >= 1 {
+	} else if CheckoutSnapshot {
 		snapId := flag.Arg(0)
-		outFolder := snapId
 
-		if flag.NArg() >= 2 {
-			outFolder = flag.Arg(1)
+		if len(OutputFolder) == 0 {
+			OutputFolder = snapId
 		}
 
 		fmt.Printf("Checking out %s\n", snapId)
@@ -224,10 +226,10 @@ func main() {
 		fmt.Printf("Reading %s\n", snapshotPath)
 		snap := ReadSnapshotFile(snapshotPath)
 
-		os.Mkdir(outFolder, 0777)
+		os.Mkdir(OutputFolder, 0777)
 
 		for i, file := range snap.Files {
-			outFile := filepath.Join(outFolder, file)
+			outFile := filepath.Join(OutputFolder, file)
 			storedFile := snap.StoredFiles[i]
 			fmt.Printf("Restoring %s to %s\n", storedFile, outFile)
 			CopyFile(storedFile, outFile)
