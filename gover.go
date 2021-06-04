@@ -113,14 +113,23 @@ func ReadSnapshotFile(snapshotPath string) Snapshot {
 	return mySnapshot
 }
 
+// Print an object as JSON to stdout
+func PrintJson(a interface{}) {
+	myEncoder := json.NewEncoder(os.Stdout)
+	myEncoder.SetIndent("", "  ")
+	myEncoder.Encode(a)
+}
+
 var LogCommand bool
 var CheckoutSnapshot string
+var Json bool
 var NumChars int
 var Message string
 
 func init() {
 	flag.BoolVar(&LogCommand, "log", false, "list snapshots")
 	flag.StringVar(&CheckoutSnapshot, "checkout", "","checkout snapshot")
+	flag.BoolVar(&Json, "json", false, "print json")
 	flag.IntVar(&NumChars, "n", 40, "number of characters to print")
 	flag.StringVar(&Message, "m", "", "commit message")
 }
@@ -142,9 +151,25 @@ func main() {
 			snapshotPath := filepath.Join(".gover","snapshots", snapshotTime+".json")
 			snap := ReadSnapshotFile(snapshotPath)
 
-			for _, file := range snap.Files {
-				fmt.Println(file)
-			}			
+			if Json {
+				type SnapshotFile struct {
+					File string
+					StoredFile string
+				}
+
+				snapFiles := []SnapshotFile{}
+
+				for i, file := range snap.Files {
+					snapFile := SnapshotFile{File: file, StoredFile:snap.StoredFiles[i]}
+					snapFiles = append(snapFiles, snapFile)
+				}
+
+				PrintJson(snapFiles)
+			} else {
+				for _, file := range snap.Files {
+					fmt.Println(file)
+				}		
+			}	
 		} else {
 			snapshotGlob := filepath.Join(".gover","snapshots","*.json")
 			snapshotPaths, err := filepath.Glob(snapshotGlob)
