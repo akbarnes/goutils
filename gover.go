@@ -115,12 +115,14 @@ func ReadSnapshotFile(snapshotPath string) Snapshot {
 
 var LogCommand bool
 var LogFiles bool
+var CheckoutSnapshot string
 var NumChars int
 var Message string
 
 func init() {
 	flag.BoolVar(&LogCommand, "log", false, "list snapshots")
 	flag.BoolVar(&LogFiles, "f", false, "print files when listing snapshots")
+	flag.StringVar(&CheckoutSnapshot, "checkout", "","checkout snapshot")
 	flag.IntVar(&NumChars, "n", 40, "number of characters to print")
 	flag.StringVar(&Message, "m", "", "commit message")
 }
@@ -147,7 +149,7 @@ func main() {
 			// ID: 943e8daa (943e8daa4bc0ab899c36b5030d4a27a6b833b2ba)
 			// Time: 2021/05/08 08:57:46
 			// Message: specify workdir path explicitly
-			fmt.Printf("Time: %s\nID: %s\nMessage: %s\n", snap.Time, snap.ID, snap.Message)
+			fmt.Printf("Time: %s\nMessage: %s\n", snap.Time, snap.Message)
 
 			if LogFiles {
 				fmt.Println("Files:")
@@ -156,8 +158,22 @@ func main() {
 					fmt.Printf("  %s\n",file)
 				}
 			}
-			
+
 			fmt.Println("")
+		}
+	} else if len(CheckoutSnapshot) > 0 {
+		fmt.Printf("Checking out %s\n", CheckoutSnapshot)
+		snapshotPath := filepath.Join(".gover","snapshots", CheckoutSnapshot+".json")
+		fmt.Printf("Reading %s\n", snapshotPath)
+		snap := ReadSnapshotFile(snapshotPath)
+
+		os.Mkdir(CheckoutSnapshot, 0777)
+
+		for i, file := range snap.Files {
+			outFile := filepath.Join(CheckoutSnapshot, file)
+			storedFile := snap.StoredFiles[i]
+			fmt.Printf("Restoring %s to %s\n", storedFile, outFile)
+			CopyFile(storedFile, outFile)
 		}
 	} else {
 		// Optional timestamp
