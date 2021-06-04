@@ -56,3 +56,13 @@ This takes an optional argument to specify an output folder. To checkout a snaps
 `gover -out output_folder -co snapshot_time`
 `gover -o output_folder -co snapshot_time`
 
+## GoRand
+Print a random text string 
+
+## GoRandText
+Create a random text file
+
+# TODO
+- Add diff program
+
+
