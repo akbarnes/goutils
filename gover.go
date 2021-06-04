@@ -114,14 +114,12 @@ func ReadSnapshotFile(snapshotPath string) Snapshot {
 }
 
 var LogCommand bool
-var LogFiles bool
 var CheckoutSnapshot string
 var NumChars int
 var Message string
 
 func init() {
 	flag.BoolVar(&LogCommand, "log", false, "list snapshots")
-	flag.BoolVar(&LogFiles, "f", false, "print files when listing snapshots")
 	flag.StringVar(&CheckoutSnapshot, "checkout", "","checkout snapshot")
 	flag.IntVar(&NumChars, "n", 40, "number of characters to print")
 	flag.StringVar(&Message, "m", "", "commit message")
@@ -139,27 +137,28 @@ func main() {
 	flag.Parse()
 
 	if LogCommand {
-		snapshotGlob := filepath.Join(".gover","snapshots","*.json")
-		snapshotPaths, err := filepath.Glob(snapshotGlob)
-		check(err)
-
-		for _, snapshotPath := range snapshotPaths {
+		if flag.NArg() >= 1 {
+			snapshotTime := flag.Arg(0)
+			snapshotPath := filepath.Join(".gover","snapshots", snapshotTime+".json")
 			snap := ReadSnapshotFile(snapshotPath)
 
-			// ID: 943e8daa (943e8daa4bc0ab899c36b5030d4a27a6b833b2ba)
-			// Time: 2021/05/08 08:57:46
-			// Message: specify workdir path explicitly
-			fmt.Printf("Time: %s\nMessage: %s\n", snap.Time, snap.Message)
+			for _, file := range snap.Files {
+				fmt.Println(file)
+			}			
+		} else {
+			snapshotGlob := filepath.Join(".gover","snapshots","*.json")
+			snapshotPaths, err := filepath.Glob(snapshotGlob)
+			check(err)
 
-			if LogFiles {
-				fmt.Println("Files:")
+			for _, snapshotPath := range snapshotPaths {
+				snap := ReadSnapshotFile(snapshotPath)
 
-				for _, file := range snap.Files {
-					fmt.Printf("  %s\n",file)
-				}
+				// ID: 943e8daa (943e8daa4bc0ab899c36b5030d4a27a6b833b2ba)
+				// Time: 2021/05/08 08:57:46
+				// Message: specify workdir path explicitly
+				fmt.Printf("Time: %s\nMessage: %s\n", snap.Time, snap.Message)
+				fmt.Println("")
 			}
-
-			fmt.Println("")
 		}
 	} else if len(CheckoutSnapshot) > 0 {
 		fmt.Printf("Checking out %s\n", CheckoutSnapshot)
