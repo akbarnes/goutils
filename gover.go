@@ -229,6 +229,15 @@ func main() {
 		os.Mkdir(OutputFolder, 0777)
 
 		for i, file := range snap.Files {
+			fileDir := filepath.Dir(file)
+			outDir := OutputFolder
+
+			if fileDir != "." {
+				outDir = filepath.Join(OutputFolder, fileDir)
+				fmt.Printf("Creating folder %s\n", outDir)
+				os.MkdirAll(outDir, 0777)
+			}
+
 			outFile := filepath.Join(OutputFolder, file)
 			storedFile := snap.StoredFiles[i]
 			fmt.Printf("Restoring %s to %s\n", storedFile, outFile)
@@ -244,8 +253,11 @@ func main() {
 		snap.ID = RandHexString(40)
 		snap.Message = Message
 
-		for i := 0; i < flag.NArg(); i++ {
-			fileName := flag.Arg(i)
+		var VersionFile = func(fileName string, info os.FileInfo, err error) error {
+			if info.IsDir() {
+				return nil
+			}
+
 			ext := filepath.Ext(fileName)
 			hash, _ := HashFile(fileName, NumChars)
 			verFolder := filepath.Join(".gover", "data", hash[0:2]) 
@@ -257,6 +269,16 @@ func main() {
 			os.MkdirAll(verFolder, 0777)
 			CopyFile(fileName, verFile)
 			fmt.Printf("%s -> %s\n", fileName, verFile)
+	
+			return nil
+		}
+	
+		// fmt.Printf("No changes detected in %s for commit %s\n", workDir, snapshot.ID)
+	
+	
+
+		for i := 0; i < flag.NArg(); i++ {
+			filepath.Walk(flag.Arg(i), VersionFile)
 		}
 
 		snapFolder := filepath.Join(".gover", "snapshots")
