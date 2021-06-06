@@ -1,11 +1,15 @@
 package main
 
 import (
-	"os"
+	// "os"
+	"flag"
 	"fmt"
 	"io/ioutil"
 )
 
+var HumanReadable bool
+var ShowErrors bool
+var Json bool
 
 func DiffFile(f1 string, f2 string) (bool, error) {
 	dat1, err1 := ioutil.ReadFile(f1)
@@ -36,15 +40,48 @@ func DiffFile(f1 string, f2 string) (bool, error) {
 	return false, nil
 }
 
+func init() {
+	flag.BoolVar(&HumanReadable, "human", false, "Show human-readable output")
+	flag.BoolVar(&ShowErrors, "errors", false, "Report errors reading files")
+	flag.BoolVar(&Json, "json", false, "Use json output")
+
+}
 
 func main() {
-	diff, err := DiffFile(os.Args[1], os.Args[2])
+	flag.Parse()
+	diff, err := DiffFile(flag.Arg(0), flag.Arg(1))
 
-	if err != nil {
-		fmt.Println("Error comparing files")
-	} else if diff {
-		fmt.Println("Files are different")
+	if HumanReadable {
+		if err != nil {
+			fmt.Println("Error comparing files")
+		} else if diff {
+			fmt.Println("Files are different")
+		} else {
+			fmt.Println("Files are equal")
+		}
+	} else if Json {
+		if err != nil {
+			if ShowErrors {
+				fmt.Println("null")
+			} else {
+				fmt.Println("true")
+			}
+		} else if diff {
+			fmt.Println("true")
+		} else {
+			fmt.Println("false")
+		}
 	} else {
-		fmt.Println("Files are the same")
+		if err != nil {
+			if ShowErrors {
+				fmt.Println("error")
+			} else {
+				fmt.Println("different")
+			}
+		} else if diff {
+			fmt.Println("different")
+		} else {
+			fmt.Println("equal")
+		}
 	}
 }
