@@ -203,14 +203,17 @@ func main() {
 				snapshotPaths, err := filepath.Glob(snapshotGlob)
 				check(err)
 
-				for _, snapshotPath := range snapshotPaths {
+				for i, snapshotPath := range snapshotPaths {
 					snap := ReadSnapshotFile(snapshotPath)
 
 					// ID: 943e8daa (943e8daa4bc0ab899c36b5030d4a27a6b833b2ba)
 					// Time: 2021/05/08 08:57:46
 					// Message: specify workdir path explicitly
-					fmt.Printf("Time: %s\nMessage: %s\n", snap.Time, snap.Message)
-					fmt.Println("")
+					fmt.Printf("%2d. Time: %s\n", i+1, snap.Time)
+
+					if len(snap.Message) > 0 {
+						fmt.Printf("Message: %s\n\n", snap.Message)
+					}
 				}
 			}
 		}
