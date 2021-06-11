@@ -219,8 +219,11 @@ func main() {
 					snap := ReadSnapshotFile(snapshotPath)
 					// Time: 2021/05/08 08:57:46
 					// Message: specify workdir path explicitly
-					fmt.Printf("Time: %s\nMessage: %s\n", snap.Time, snap.Message)
-					fmt.Println("")
+					fmt.Printf("Time: %s\n", snap.Time)
+
+					if len(snap.Message) > 0 {
+						fmt.Printf("Message: %s\n\n", snap.Message)
+					}
 				}
 			}
 		}
