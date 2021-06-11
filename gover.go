@@ -8,22 +8,19 @@ import (
 	"io/ioutil"
 	"os"
 	"time"
-	"math/rand"
+	"strings"
 	"path/filepath"
 	"encoding/json"
+	"github.com/bmatcuk/doublestar"
 )
+
+const NumChars = 40
 
 func check(e error) {
 	if e != nil {
 		panic(e)
 	}
 }
-
-var seededRand *rand.Rand = rand.New(
-	rand.NewSource(time.Now().UnixNano()))
-  
-const NumChars = 40
-const HexChars = "0123456789abcdef"
 
 func HashFile(FileName string, NumChars int) (string, error) {
 	var data []byte
@@ -78,7 +75,7 @@ func (snap Snapshot) Write(snapshotPath string) {
 	f.Close()
 }
 
-func CommitSnapshot(files []string, message string) {
+func CommitSnapshot(message string, filters []string) {
 	// Optional timestamp
 	t := time.Now()
 	ts := t.Format("2006-01-02T15-04-05")
@@ -87,9 +84,36 @@ func CommitSnapshot(files []string, message string) {
 	snap.StoredFiles = []string{}
 	snap.Message = message
 
+	// workingDirectory, err := os.Getwd()
+	// check(err)
+	workingDirectory := "."
+
+	goverDir := filepath.Join(workingDirectory, ".gover")
+	fmt.Printf("Gover directory: %s\n", goverDir)
+
 	var VersionFile = func(fileName string, info os.FileInfo, err error) error {
 		if info.IsDir() {
 			return nil
+		}
+
+		if strings.HasPrefix(fileName, goverDir) {
+			if VerboseMode {
+				fmt.Printf("Skipping file %s in .gover\n", fileName)
+			}
+			return nil
+		}
+
+		for _, pattern := range filters {
+			matched, err := doublestar.Match(pattern, fileName)
+
+			check(err)
+			if matched {
+				if VerboseMode {
+					fmt.Printf("Skipping file %s which matches with %s\n", fileName, pattern)
+				}
+
+				return nil
+			}
 		}
 
 		ext := filepath.Ext(fileName)
@@ -115,11 +139,7 @@ func CommitSnapshot(files []string, message string) {
 	}
 
 	// fmt.Printf("No changes detected in %s for commit %s\n", workDir, snapshot.ID)
-
-
-	for _, f := range files {
-		filepath.Walk(f, VersionFile)
-	}
+	filepath.Walk(workingDirectory, VersionFile)
 
 	if JsonMode {
 		PrintJson(snap)
@@ -250,6 +270,26 @@ func PrintJson(a interface{}) {
 	myEncoder.Encode(a)
 }
 
+func ReadFilters() []string {
+	filterPath := ".gover_ignore.json"
+	var filters []string
+	f, err := os.Open(filterPath)
+
+	if err != nil {
+		// panic(fmt.Sprintf("Error: Could not read snapshot file %s", snapshotPath))
+		return []string{}
+	}
+
+	myDecoder := json.NewDecoder(f)
+
+	if err := myDecoder.Decode(&filters); err != nil {
+		panic(fmt.Sprintf("Error:could not decode filter file %s", filterPath))
+	}
+
+	f.Close()
+	return filters
+}
+
 var LogCommand bool
 var CheckoutCommand bool
 var JsonMode bool
@@ -293,7 +333,8 @@ func main() {
 	} else if CheckoutCommand {
 		CheckoutSnaphot(flag.Arg(0), OutputFolder)
 	} else {
-		CommitSnapshot(flag.Args(), Message)
+		filters := ReadFilters()
+		CommitSnapshot(Message, filters)
 	}
 }
 
