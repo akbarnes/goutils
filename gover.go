@@ -25,22 +25,6 @@ var seededRand *rand.Rand = rand.New(
 const NumChars = 40
 const HexChars = "0123456789abcdef"
 
-// Return a random string of specified length with hexadecimal characters
-func RandHexString(length int) string {
-	return RandString(length, HexChars)
-}
-
-// Return a random string of specified length with an arbitrary character set
-func RandString(length int, charset string) string {
-	b := make([]byte, length)
-
-	for i := range b {
-	b[i] = charset[seededRand.Intn(len(charset))]
-	}
-
-	return string(b)
-}
-
 func HashFile(FileName string, NumChars int) (string, error) {
 	var data []byte
 	var err error
@@ -94,6 +78,35 @@ func (snap Snapshot) Write(snapshotPath string) {
 	f.Close()
 }
 
+func Checkout(snapId, outputFolder) {
+	if len(outputFolder) == 0 {
+		outputFolder = snapId
+	}
+
+	fmt.Printf("Checking out %s\n", snapId)
+	snapshotPath := filepath.Join(".gover","snapshots", snapId+".json")
+	fmt.Printf("Reading %s\n", snapshotPath)
+	snap := ReadSnapshotFile(snapshotPath)
+
+	os.Mkdir(outputFolder, 0777)
+
+	for i, file := range snap.Files {
+		fileDir := filepath.Dir(file)
+		outDir := outputFolder
+
+		if fileDir != "." {
+			outDir = filepath.Join(outputFolder, fileDir)
+			fmt.Printf("Creating folder %s\n", outDir)
+			os.MkdirAll(outDir, 0777)
+		}
+
+		outFile := filepath.Join(outputFolder, file)
+		storedFile := snap.StoredFiles[i]
+		fmt.Printf("Restoring %s to %s\n", storedFile, outFile)
+		CopyFile(storedFile, outFile)
+	}
+}
+
 // Read a snapshot given a file path
 func ReadSnapshotFile(snapshotPath string) Snapshot {
 	var mySnapshot Snapshot
@@ -143,7 +156,6 @@ func init() {
 }
 
 type Snapshot struct {
-	ID            string
 	Message       string
 	Time          string
 	Files	      []string
@@ -205,8 +217,6 @@ func main() {
 
 				for _, snapshotPath := range snapshotPaths {
 					snap := ReadSnapshotFile(snapshotPath)
-
-					// ID: 943e8daa (943e8daa4bc0ab899c36b5030d4a27a6b833b2ba)
 					// Time: 2021/05/08 08:57:46
 					// Message: specify workdir path explicitly
 					fmt.Printf("Time: %s\nMessage: %s\n", snap.Time, snap.Message)
@@ -215,34 +225,7 @@ func main() {
 			}
 		}
 	} else if CheckoutSnapshot {
-		snapId := flag.Arg(0)
-
-		if len(OutputFolder) == 0 {
-			OutputFolder = snapId
-		}
-
-		fmt.Printf("Checking out %s\n", snapId)
-		snapshotPath := filepath.Join(".gover","snapshots", snapId+".json")
-		fmt.Printf("Reading %s\n", snapshotPath)
-		snap := ReadSnapshotFile(snapshotPath)
-
-		os.Mkdir(OutputFolder, 0777)
-
-		for i, file := range snap.Files {
-			fileDir := filepath.Dir(file)
-			outDir := OutputFolder
-
-			if fileDir != "." {
-				outDir = filepath.Join(OutputFolder, fileDir)
-				fmt.Printf("Creating folder %s\n", outDir)
-				os.MkdirAll(outDir, 0777)
-			}
-
-			outFile := filepath.Join(OutputFolder, file)
-			storedFile := snap.StoredFiles[i]
-			fmt.Printf("Restoring %s to %s\n", storedFile, outFile)
-			CopyFile(storedFile, outFile)
-		}
+		Checkout(flag.Arg(0), OutputFolder)
 	} else {
 		// Optional timestamp
 		t := time.Now()
@@ -250,7 +233,6 @@ func main() {
 		snap := Snapshot{Time: ts}
 		snap.Files = []string{}
 		snap.StoredFiles = []string{}
-		snap.ID = RandHexString(40)
 		snap.Message = Message
 
 		var VersionFile = func(fileName string, info os.FileInfo, err error) error {
