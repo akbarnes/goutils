@@ -78,7 +78,7 @@ func (snap Snapshot) Write(snapshotPath string) {
 	f.Close()
 }
 
-func Checkout(snapId, outputFolder) {
+func Checkout(snapId string, outputFolder string) {
 	if len(outputFolder) == 0 {
 		outputFolder = snapId
 	}
@@ -127,6 +127,20 @@ func ReadSnapshotFile(snapshotPath string) Snapshot {
 	return mySnapshot
 }
 
+// Print object if verbosity level is WarningLevel or greater
+func VerbosePrintln(a ...interface{}) {
+	if VerboseMode {
+		fmt.Println(a...)
+	}
+}
+
+// Print formatted object if verbosity level is WarningLevel or greater
+func VerbosePrintf(msg string, a ...interface{}) {
+	if VerboseMode {
+		fmt.Printf(msg, a...)
+	}
+}
+
 // Print an object as JSON to stdout
 func PrintJson(a interface{}) {
 	myEncoder := json.NewEncoder(os.Stdout)
@@ -136,10 +150,11 @@ func PrintJson(a interface{}) {
 
 var LogCommand bool
 var CheckoutSnapshot bool
-var Json bool
+var JsonMode bool
 var Message string
 var Commit bool
 var OutputFolder string
+var VerboseMode bool
 
 func init() {
 	flag.BoolVar(&LogCommand, "log", false, "list snapshots")
@@ -147,12 +162,14 @@ func init() {
 	flag.BoolVar(&Commit, "ci", false, "commit snapshot")	
 	flag.BoolVar(&CheckoutSnapshot, "checkout", false,"checkout snapshot")
 	flag.BoolVar(&CheckoutSnapshot, "co", false,"checkout snapshot")
-	flag.BoolVar(&Json, "json", false, "print json")
-	flag.BoolVar(&Json, "j", false, "print json")
+	flag.BoolVar(&JsonMode, "json", false, "print json")
+	flag.BoolVar(&JsonMode, "j", false, "print json")
 	flag.StringVar(&Message, "msg", "", "commit message")
 	flag.StringVar(&Message, "m", "", "commit message")
 	flag.StringVar(&OutputFolder, "out", "", "output folder")
 	flag.StringVar(&OutputFolder, "o", "", "output folder")	
+	flag.BoolVar(&VerboseMode, "verbose", false, "verbose")
+	flag.BoolVar(&VerboseMode, "v", false, "verbose")	
 }
 
 type Snapshot struct {
@@ -171,7 +188,7 @@ func main() {
 			snapshotPath := filepath.Join(".gover","snapshots", snapshotTime+".json")
 			snap := ReadSnapshotFile(snapshotPath)
 
-			if Json {
+			if JsonMode {
 				type SnapshotFile struct {
 					File string
 					StoredFile string
@@ -191,7 +208,7 @@ func main() {
 				}		
 			}	
 		} else {
-			if Json {
+			if JsonMode {
 				type Snap struct {
 					Time string
 					Message string
@@ -237,6 +254,8 @@ func main() {
 		snap.Files = []string{}
 		snap.StoredFiles = []string{}
 		snap.Message = Message
+		FileNames := []string{}
+
 
 		var VersionFile = func(fileName string, info os.FileInfo, err error) error {
 			if info.IsDir() {
@@ -253,17 +272,28 @@ func main() {
 
 			os.MkdirAll(verFolder, 0777)
 			CopyFile(fileName, verFile)
-			fmt.Printf("%s -> %s\n", fileName, verFile)
-	
+
+			if !JsonMode {
+				if VerboseMode {
+						fmt.Printf("%s -> %s\n", fileName, verFile)
+				} else {
+					fmt.Println(fileName)
+				}
+			}
+
+			FileNames = append(FileNames, fileName)
 			return nil
 		}
 	
 		// fmt.Printf("No changes detected in %s for commit %s\n", workDir, snapshot.ID)
 	
-	
 
 		for i := 0; i < flag.NArg(); i++ {
 			filepath.Walk(flag.Arg(i), VersionFile)
+		}
+
+		if JsonMode {
+			PrintJson(FileNames)
 		}
 
 		snapFolder := filepath.Join(".gover", "snapshots")
