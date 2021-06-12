@@ -11,7 +11,7 @@ import (
 	"strings"
 	"path/filepath"
 	"encoding/json"
-	"github.com/bmatcuk/doublestar"
+	"github.com/bmatcuk/doublestar/v4"
 )
 
 const NumChars = 40
@@ -88,15 +88,18 @@ func CommitSnapshot(message string, filters []string) {
 	// check(err)
 	workingDirectory := "."
 
-	goverDir := filepath.Join(workingDirectory, ".gover")
-	fmt.Printf("Gover directory: %s\n", goverDir)
+	goverDir := filepath.Join(workingDirectory, ".gover", "**")
 
 	var VersionFile = func(fileName string, info os.FileInfo, err error) error {
+		fileName = strings.TrimSuffix(fileName, "\n")
+
 		if info.IsDir() {
 			return nil
 		}
 
-		if strings.HasPrefix(fileName, goverDir) {
+		matched, err := doublestar.PathMatch(goverDir, fileName)
+
+		if matched {
 			if VerboseMode {
 				fmt.Printf("Skipping file %s in .gover\n", fileName)
 			}
@@ -104,7 +107,7 @@ func CommitSnapshot(message string, filters []string) {
 		}
 
 		for _, pattern := range filters {
-			matched, err := doublestar.Match(pattern, fileName)
+			matched, err := doublestar.PathMatch(pattern, fileName)
 
 			check(err)
 			if matched {
