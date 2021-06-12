@@ -31,6 +31,13 @@ Calculate the SHA256 hash of a file
 ## GoVer
 This is a much simplified version of [dupver](https://github.com/akbarnes/dupver/) that uses a local repository and file-level deduplication. There are only three commands `commit`, `log`, and `checkout`. 
 
+To build:
+```
+go mod init goutils
+go get github.com/bmatcuk/doublestar/v4
+go install gover.go
+```
+
 ### Commit
 The `-msg` or `-m` message flag is optional, as is the `-commit` or `-ci` flag as commiting is the default action
 `gover -commit -msg 'a message' file1 file2 file3`

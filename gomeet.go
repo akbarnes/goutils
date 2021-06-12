@@ -5,7 +5,7 @@ import (
 	"os"
     "errors"
 	"strconv"
-    "strings" 
+    "strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
