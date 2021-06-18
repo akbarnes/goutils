@@ -16,6 +16,14 @@ import (
 
 const NumChars = 40
 
+type Snapshot struct {
+	Message       string
+	Time          string
+	Files	      []string
+	StoredFiles	  []string
+	FileProps	  []os.FileInfo
+}
+
 func check(e error) {
 	if e != nil {
 		panic(e)
@@ -63,6 +71,41 @@ func CopyFile(src, dst string) error {
 	return out.Close()
 }
 
+func WriteHead(snapshotPath string) {
+	headPath := filepath.Join(".gover", "head.json")
+	f, err := os.Create(headPath)
+
+	if err != nil {
+		panic(fmt.Sprintf("Error: Could not create head file %s", headPath))
+	}
+
+	myEncoder := json.NewEncoder(f)
+	myEncoder.SetIndent("", "  ")
+	myEncoder.Encode(snapshotPath)
+	f.Close()
+}
+
+// Read a snapshot given a file path
+func ReadHead() Snapshot {
+	headPath := filepath.Join(".gover", "head.json")
+	f, err := os.Open(headPath)
+
+	if err != nil {
+		// panic(fmt.Sprintf("Error: Could not read snapshot file %s", snapshotPath))
+		return Snapshot{}
+	}
+
+	snapshotPath := ""
+	myDecoder := json.NewDecoder(f)
+
+	if err := myDecoder.Decode(&snapshotPath); err != nil {
+		panic(fmt.Sprintf("Error:could not decode head file %s", headPath))
+	}
+
+	f.Close()
+	return ReadSnapshotFile(snapshotPath)
+}
+
 func (snap Snapshot) Write(snapshotPath string) {
 	f, err := os.Create(snapshotPath)
 
@@ -74,6 +117,7 @@ func (snap Snapshot) Write(snapshotPath string) {
 	myEncoder.Encode(snap)
 	f.Close()
 }
+
 
 func CommitSnapshot(message string, filters []string) {
 	// Optional timestamp
@@ -124,8 +168,15 @@ func CommitSnapshot(message string, filters []string) {
 		verFolder := filepath.Join(".gover", "data", hash[0:2]) 
 		verFile := filepath.Join(verFolder, hash + ext)
 
+		props, err := os.Stat(fileName)
+
+		if err != nil {
+			return err
+		}
+
 		snap.Files = append(snap.Files, fileName)
 		snap.StoredFiles = append(snap.StoredFiles, verFile)
+		snap.FileProps = append(snap.FileProps, props)
 
 		os.MkdirAll(verFolder, 0777)
 		CopyFile(fileName, verFile)
@@ -152,6 +203,7 @@ func CommitSnapshot(message string, filters []string) {
 	os.MkdirAll(snapFolder, 0777)
 	snapFile := filepath.Join(snapFolder, ts + ".json")
 	snap.Write(snapFile)
+	WriteHead(snapFile)
 }
 
 func CheckoutSnaphot(snapId string, outputFolder string) {
@@ -229,7 +281,7 @@ func LogAllSnapshots() {
 
 		PrintJson(snaps)
 	} else {
-		snapshotGlob := filepath.Join(".gover","snapshots","*.json")
+		snapshotGlob := filepath.Join(".gover", "snapshots", "*.json")
 		snapshotPaths, err := filepath.Glob(snapshotGlob)
 		check(err)
 
@@ -317,12 +369,15 @@ func init() {
 	flag.BoolVar(&VerboseMode, "v", false, "verbose")	
 }
 
-type Snapshot struct {
-	Message       string
-	Time          string
-	Files	      []string
-	StoredFiles	  []string
-}
+// type Commit struct {
+// 	ID        string
+// 	Branch    string
+// 	Message   string
+// 	Time      string
+// 	ParentIDs []string
+// 	Files     []fileInfo
+// 	ChunkIDs  []string
+// }
 
 func main() {
 	flag.Parse()
