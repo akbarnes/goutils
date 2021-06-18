@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 	"strings"
+	"strconv"
 	"path/filepath"
 	"encoding/json"
 	"github.com/bmatcuk/doublestar/v4"
@@ -20,8 +21,8 @@ type Snapshot struct {
 	Message       string
 	Time          string
 	Files	      []string
-	StoredFiles	  []string
-	FileProps	  []os.FileInfo
+	StoredFiles	  map[string]string
+	ModTimes	  map[string]string
 }
 
 func check(e error) {
@@ -92,17 +93,20 @@ func ReadHead() Snapshot {
 
 	if err != nil {
 		// panic(fmt.Sprintf("Error: Could not read snapshot file %s", snapshotPath))
-		return Snapshot{}
+		return Snapshot{Files: []string{}, StoredFiles: make(map[string]string), ModTimes: make(map[string]string)}
 	}
 
-	snapshotPath := ""
+	snapshotId := ""
 	myDecoder := json.NewDecoder(f)
 
-	if err := myDecoder.Decode(&snapshotPath); err != nil {
-		panic(fmt.Sprintf("Error:could not decode head file %s", headPath))
+	if err := myDecoder.Decode(&snapshotId); err != nil {
+		fmt.Printf("Error:could not decode head file %s\n", headPath)
+		check(err)
 	}
 
 	f.Close()
+
+	snapshotPath := filepath.Join(".gover", "snapshots", snapshotId + ".json")
 	return ReadSnapshotFile(snapshotPath)
 }
 
@@ -125,12 +129,14 @@ func CommitSnapshot(message string, filters []string) {
 	ts := t.Format("2006-01-02T15-04-05")
 	snap := Snapshot{Time: ts}
 	snap.Files = []string{}
-	snap.StoredFiles = []string{}
+	snap.StoredFiles = make(map[string]string)
+	snap.ModTimes = make(map[string]string)
 	snap.Message = message
 
 	// workingDirectory, err := os.Getwd()
 	// check(err)
 	workingDirectory := "."
+	head := ReadHead()
 
 	goverDir := filepath.Join(workingDirectory, ".gover", "**")
 
@@ -147,6 +153,7 @@ func CommitSnapshot(message string, filters []string) {
 			if VerboseMode {
 				fmt.Printf("Skipping file %s in .gover\n", fileName)
 			}
+
 			return nil
 		}
 
@@ -164,28 +171,48 @@ func CommitSnapshot(message string, filters []string) {
 		}
 
 		ext := filepath.Ext(fileName)
-		hash, _ := HashFile(fileName, NumChars)
+		hash, hashErr := HashFile(fileName, NumChars)
+
+		if hashErr != nil {
+			return hashErr
+		}
+
 		verFolder := filepath.Join(".gover", "data", hash[0:2]) 
 		verFile := filepath.Join(verFolder, hash + ext)
 
 		props, err := os.Stat(fileName)
 
 		if err != nil {
-			return err
+			if VerboseMode {
+				fmt.Printf("Skipping unreadable file %s\n", fileName)
+			}
+
+			return nil
 		}
 
+		modTime := props.ModTime().Format("2006-01-02T15-04-05")
+
+
+
 		snap.Files = append(snap.Files, fileName)
-		snap.StoredFiles = append(snap.StoredFiles, verFile)
-		snap.FileProps = append(snap.FileProps, props)
+		snap.StoredFiles[fileName] = verFile
+		snap.ModTimes[fileName] = modTime
 
 		os.MkdirAll(verFolder, 0777)
-		CopyFile(fileName, verFile)
 
-		if !JsonMode {
+		if headModTime, ok := head.ModTimes[fileName]; ok && modTime == headModTime {
 			if VerboseMode {
-					fmt.Printf("%s -> %s\n", fileName, verFile)
-			} else {
-				fmt.Println(fileName)
+				fmt.Printf("Skipping %s\n", fileName)
+			}
+		} else {
+			CopyFile(fileName, verFile)
+
+			if !JsonMode {
+				if VerboseMode {
+						fmt.Printf("%s -> %s\n", fileName, verFile)
+				} else {
+					fmt.Println(fileName)
+				}
 			}
 		}
 
@@ -203,7 +230,7 @@ func CommitSnapshot(message string, filters []string) {
 	os.MkdirAll(snapFolder, 0777)
 	snapFile := filepath.Join(snapFolder, ts + ".json")
 	snap.Write(snapFile)
-	WriteHead(snapFile)
+	WriteHead(ts)
 }
 
 func CheckoutSnaphot(snapId string, outputFolder string) {
@@ -218,7 +245,7 @@ func CheckoutSnaphot(snapId string, outputFolder string) {
 
 	os.Mkdir(outputFolder, 0777)
 
-	for i, file := range snap.Files {
+	for _, file := range snap.Files {
 		fileDir := filepath.Dir(file)
 		outDir := outputFolder
 
@@ -229,14 +256,19 @@ func CheckoutSnaphot(snapId string, outputFolder string) {
 		}
 
 		outFile := filepath.Join(outputFolder, file)
-		storedFile := snap.StoredFiles[i]
+		storedFile := snap.StoredFiles[file]
 		fmt.Printf("Restoring %s to %s\n", storedFile, outFile)
 		CopyFile(storedFile, outFile)
 	}
 }
 
-func LogSingleSnapshot(snapshotTime string) {
-	snapshotPath := filepath.Join(".gover","snapshots", snapshotTime+".json")
+func LogSingleSnapshot(snapshotNum int) {
+	snapshotGlob := filepath.Join(".gover", "snapshots", "*.json")
+	snapshotPaths, err := filepath.Glob(snapshotGlob)
+	check(err)
+
+	snapshotPath := snapshotPaths[snapshotNum - 1]
+
 	snap := ReadSnapshotFile(snapshotPath)
 
 	if JsonMode {
@@ -247,8 +279,8 @@ func LogSingleSnapshot(snapshotTime string) {
 
 		snapFiles := []SnapshotFile{}
 
-		for i, file := range snap.Files {
-			snapFile := SnapshotFile{File: file, StoredFile:snap.StoredFiles[i]}
+		for _, file := range snap.Files {
+			snapFile := SnapshotFile{File: file, StoredFile:snap.StoredFiles[file]}
 			snapFiles = append(snapFiles, snapFile)
 		}
 
@@ -285,11 +317,11 @@ func LogAllSnapshots() {
 		snapshotPaths, err := filepath.Glob(snapshotGlob)
 		check(err)
 
-		for _, snapshotPath := range snapshotPaths {
+		for i, snapshotPath := range snapshotPaths {
 			snap := ReadSnapshotFile(snapshotPath)
 			// Time: 2021/05/08 08:57:46
 			// Message: specify workdir path explicitly
-			fmt.Printf("Time: %s\n", snap.Time)
+			fmt.Printf("%3d) Time: %s\n", i + 1, snap.Time)
 
 			if len(snap.Message) > 0 {
 				fmt.Printf("Message: %s\n\n", snap.Message)
@@ -305,13 +337,14 @@ func ReadSnapshotFile(snapshotPath string) Snapshot {
 
 	if err != nil {
 		// panic(fmt.Sprintf("Error: Could not read snapshot file %s", snapshotPath))
-		return Snapshot{}
+		return Snapshot{Files: []string{}, StoredFiles: make(map[string]string), ModTimes: make(map[string]string)}
 	}
 
 	myDecoder := json.NewDecoder(f)
 
 	if err := myDecoder.Decode(&mySnapshot); err != nil {
-		panic(fmt.Sprintf("Error:could not decode snapshot file %s", snapshotPath))
+		fmt.Printf("Error:could not decode head file %s\n", snapshotPath)
+		check(err)
 	}
 
 	f.Close()
@@ -384,7 +417,8 @@ func main() {
 
 	if LogCommand {
 		if flag.NArg() >= 1 {
-			LogSingleSnapshot(flag.Arg(0))
+			snapshotNum, _ := strconv.Atoi(flag.Arg(0))
+			LogSingleSnapshot(snapshotNum)
 		} else {
 			LogAllSnapshots()
 		}
