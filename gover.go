@@ -233,15 +233,124 @@ func CommitSnapshot(message string, filters []string) {
 	WriteHead(ts)
 }
 
+func DiffSnapshot(snapId string, filters []string) {
+	var snap Snapshot
+
+	if len(snapId) > 0 {
+		snap = ReadSnapshot(snapId)
+	} else {
+		snap = ReadHead()
+	}
+
+	status := make(map[string]string)
+
+	for _, fileName := range snap.Files {
+		status[fileName] = "-"
+	}
+
+	// workingDirectory, err := os.Getwd()
+	// check(err)
+	workingDirectory := "."
+	head := ReadHead()
+
+	goverDir := filepath.Join(workingDirectory, ".gover", "**")
+
+	var DiffFile = func(fileName string, info os.FileInfo, err error) error {
+		fileName = strings.TrimSuffix(fileName, "\n")
+
+		if info.IsDir() {
+			return nil
+		}
+
+		matched, err := doublestar.PathMatch(goverDir, fileName)
+
+		if matched {
+			if VerboseMode {
+				fmt.Printf("Skipping file %s in .gover\n", fileName)
+			}
+
+			return nil
+		}
+
+		for _, pattern := range filters {
+			matched, err := doublestar.PathMatch(pattern, fileName)
+
+			check(err)
+			if matched {
+				if VerboseMode {
+					fmt.Printf("Skipping file %s which matches with %s\n", fileName, pattern)
+				}
+
+				return nil
+			}
+		}
+
+		ext := filepath.Ext(fileName)
+		hash, hashErr := HashFile(fileName, NumChars)
+
+		if hashErr != nil {
+			return hashErr
+		}
+
+		verFolder := filepath.Join(".gover", "data", hash[0:2]) 
+		verFile := filepath.Join(verFolder, hash + ext)
+
+		props, err := os.Stat(fileName)
+
+		if err != nil {
+			if VerboseMode {
+				fmt.Printf("Skipping unreadable file %s\n", fileName)
+			}
+
+			return nil
+		}
+
+		modTime := props.ModTime().Format("2006-01-02T15-04-05")
+
+
+
+		snap.Files = append(snap.Files, fileName)
+		snap.StoredFiles[fileName] = verFile
+		snap.ModTimes[fileName] = modTime
+
+		os.MkdirAll(verFolder, 0777)
+
+		if headModTime, ok := head.ModTimes[fileName]; ok {
+			if modTime == headModTime {
+					status[fileName] = "="
+			} else {
+				status[fileName] = "M"
+			}
+		} else {
+			status[fileName] = "+"
+		}
+
+		return nil
+	}
+
+	// fmt.Printf("No changes detected in %s for commit %s\n", workDir, snapshot.ID)
+	filepath.Walk(workingDirectory, DiffFile)
+
+	if JsonMode {
+
+	} else {
+		for fileName, fileStatus := range status {
+			if fileStatus == "=" && !VerboseMode {
+				continue
+			}
+	
+			fmt.Printf("%s %s\n", fileStatus, fileName)
+		}
+	}
+}
+
 func CheckoutSnaphot(snapId string, outputFolder string) {
 	if len(outputFolder) == 0 {
 		outputFolder = snapId
 	}
 
 	fmt.Printf("Checking out %s\n", snapId)
-	snapshotPath := filepath.Join(".gover","snapshots", snapId+".json")
-	fmt.Printf("Reading %s\n", snapshotPath)
-	snap := ReadSnapshotFile(snapshotPath)
+	snap := ReadSnapshot(snapId)
 
 	os.Mkdir(outputFolder, 0777)
 
@@ -330,6 +439,16 @@ func LogAllSnapshots() {
 	}
 }
 
+func ReadSnapshot(snapId string) Snapshot {
+	snapshotPath := filepath.Join(".gover", "snapshots", snapId + ".json")
+
+	if VerboseMode {
+		fmt.Printf("Reading %s\n", snapshotPath)
+	}
+
+	return ReadSnapshotFile(snapId)
+}
+
 // Read a snapshot given a file path
 func ReadSnapshotFile(snapshotPath string) Snapshot {
 	var mySnapshot Snapshot
@@ -380,6 +499,7 @@ func ReadFilters() []string {
 
 var LogCommand bool
 var CheckoutCommand bool
+var StatusCommand bool
 var JsonMode bool
 var Message string
 var CommitCommand bool
@@ -390,6 +510,8 @@ func init() {
 	flag.BoolVar(&LogCommand, "log", false, "list snapshots")
 	flag.BoolVar(&CommitCommand, "commit", false, "commit snapshot")
 	flag.BoolVar(&CommitCommand, "ci", false, "commit snapshot")	
+	flag.BoolVar(&StatusCommand, "status", false, "working directory status")
+	flag.BoolVar(&StatusCommand, "st", false, "working directory status")		
 	flag.BoolVar(&CheckoutCommand, "checkout", false,"checkout snapshot")
 	flag.BoolVar(&CheckoutCommand, "co", false,"checkout snapshot")
 	flag.BoolVar(&JsonMode, "json", false, "print json")
@@ -424,8 +546,21 @@ func main() {
 		}
 	} else if CheckoutCommand {
 		CheckoutSnaphot(flag.Arg(0), OutputFolder)
+	} else if StatusCommand {
+		filters := ReadFilters()
+
+		if flag.NArg() >= 1 {
+			DiffSnapshot(flag.Arg(0), filters)
+		} else {
+			DiffSnapshot("", filters)
+		}		
 	} else {
 		filters := ReadFilters()
+
+		if len(Message) == 0 && flag.NArg() >= 1 {
+			Message = flag.Arg(0)
+		}
+
 		CommitSnapshot(Message, filters)
 	}
 }
