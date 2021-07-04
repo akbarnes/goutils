@@ -233,13 +233,18 @@ func CommitSnapshot(message string, filters []string) {
 	WriteHead(ts)
 }
 
-func CheckoutSnaphot(snapId string, outputFolder string) {
+func CheckoutSnaphot(snapshotNum int, outputFolder string) {
 	if len(outputFolder) == 0 {
-		outputFolder = snapId
+		outputFolder = fmt.Sprintf("snapshot%04d", snapshotNum)
 	}
 
-	fmt.Printf("Checking out %s\n", snapId)
-	snapshotPath := filepath.Join(".gover","snapshots", snapId+".json")
+	fmt.Printf("Checking out %s\n", snapshotNum)
+
+	snapshotGlob := filepath.Join(".gover", "snapshots", "*.json")
+	snapshotPaths, err := filepath.Glob(snapshotGlob)
+	check(err)
+
+	snapshotPath := snapshotPaths[snapshotNum - 1]
 	fmt.Printf("Reading %s\n", snapshotPath)
 	snap := ReadSnapshotFile(snapshotPath)
 
@@ -423,7 +428,8 @@ func main() {
 			LogAllSnapshots()
 		}
 	} else if CheckoutCommand {
-		CheckoutSnaphot(flag.Arg(0), OutputFolder)
+		snapshotNum, _ := strconv.Atoi(flag.Arg(0))
+		CheckoutSnaphot(snapshotNum, OutputFolder)
 	} else {
 		filters := ReadFilters()
 		CommitSnapshot(Message, filters)
