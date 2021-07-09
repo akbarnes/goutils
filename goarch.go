@@ -44,9 +44,25 @@ func StoreFile(out *os.File, src string) (int64, error) {
 }
 
 func ExtractFile(file string, snap Snapshot, in *os.File, dst string) error {
+	outputFolder := filepath.Dir(dst)
+
+	if err := os.MkdirAll(outputFolder, 0777); err != nil {
+		if VerboseMode {
+			fmt.Printf("Error creating output folder %s\n", outputFolder)
+		}
+
+		return err
+	}
+
 	out, err := os.Create(dst)
 
 	if err != nil {
+		if VerboseMode {
+			fmt.Printf("Error creating destination file %s:\n", dst)
+			fmt.Println(err)
+			fmt.Printf("\n")
+		}
+
 		return err
 	}
 
@@ -56,10 +72,20 @@ func ExtractFile(file string, snap Snapshot, in *os.File, dst string) error {
 	nbytes := snap.Lengths[file]
 
 	if _, err := in.Seek(offset, 0); err != nil {
+		if VerboseMode {
+			fmt.Println("Error seeking on archive file")
+		}
+
 		return err
 	}
 
 	if _, err := io.CopyN(out, in, nbytes); err != nil {
+		if VerboseMode {
+			fmt.Printf("Error copying to destination file %s\n", dst)
+			fmt.Println(err)
+			fmt.Printf("\n")
+		}
+
 		return err
 	}
 
@@ -138,11 +164,7 @@ func ExtractArchive(archivePrefix string, outputFolder string) {
 		fmt.Println("Error reading archive contents")
 	}
 
-	if err := os.Mkdir(outputFolder, 0777); err != nil {
-		fmt.Println("Error creating output folder")
-	}
-
-	archivePath := archivePrefix + ".json"
+	archivePath := archivePrefix + ".dat"
 	archiveFile, err := os.Open(archivePath)
 
 	if err != nil {
@@ -154,10 +176,9 @@ func ExtractArchive(archivePrefix string, outputFolder string) {
 
 	for _, file := range snap.Files {
 		outPath := filepath.Join(outputFolder, file)
-		fmt.Println(file)
 
-		if ExtractFile(file, snap, archiveFile, outPath) != nil {
-			fmt.Printf("Error extracting file %s\n", file)
+		if err := ExtractFile(file, snap, archiveFile, outPath); err == nil {
+			fmt.Println(file)
 		}
 	}
 }
