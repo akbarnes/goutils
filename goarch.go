@@ -14,6 +14,7 @@ type Snapshot struct {
 	Files    []string
 	ModTimes map[string]string
 	Offsets  map[string]int64
+	Lengths  map[string]int64
 }
 
 func Check(e error) {
@@ -48,16 +49,18 @@ func (snap Snapshot) Write(snapshotPath string) {
 	if err != nil {
 		panic(fmt.Sprintf("Error: Could not create snapshot file %s", snapshotPath))
 	}
+
+	defer f.Close()
 	myEncoder := json.NewEncoder(f)
 	myEncoder.SetIndent("", "  ")
 	myEncoder.Encode(snap)
-	f.Close()
 }
 
 func StoreFolder(archivePrefix string, workingDirectory string) (int64, error) {
 	snap := Snapshot{}
 	snap.Files = []string{}
 	snap.Offsets = make(map[string]int64)
+	snap.Lengths = make(map[string]int64)
 	snap.ModTimes = make(map[string]string)
 
 	archivePath := archivePrefix + ".dat"
@@ -93,6 +96,7 @@ func StoreFolder(archivePrefix string, workingDirectory string) (int64, error) {
 		snap.ModTimes[fileName] = modTime
 		snap.Offsets[fileName] = nbytes
 		fileBytes, _ := CopyFile(archiveFile, fileName)
+		snap.Lengths[fileName] = fileBytes
 		nbytes += fileBytes
 		return nil
 	}
@@ -113,7 +117,7 @@ func StoreFolder(archivePrefix string, workingDirectory string) (int64, error) {
 
 // 	snapshotGlob := filepath.Join(".gover", "snapshots", "*.json")
 // 	snapshotPaths, err := filepath.Glob(snapshotGlob)
-// 	check(err)
+// 	Check(err)
 
 // 	snapshotPath := snapshotPaths[snapshotNum-1]
 // 	fmt.Printf("Reading %s\n", snapshotPath)
@@ -138,87 +142,58 @@ func StoreFolder(archivePrefix string, workingDirectory string) (int64, error) {
 // 	}
 // }
 
-// func LogSingleSnapshot(snapshotNum int) {
-// 	snapshotGlob := filepath.Join(".gover", "snapshots", "*.json")
-// 	snapshotPaths, err := filepath.Glob(snapshotGlob)
-// 	check(err)
+func ListArchiveContents(archivePrefix string) {
+	snap, err := ReadArchive(archivePrefix)
 
-// 	snapshotPath := snapshotPaths[snapshotNum-1]
+	if err != nil {
+		fmt.Println("Error reading archive contents")
+	}
 
-// 	snap := ReadSnapshotFile(snapshotPath)
+	for i, file := range snap.Files {
+		mtime := snap.ModTimes[file]
+		bytes := snap.Lengths[file]
 
-// 	if JsonMode {
-// 		type SnapshotFile struct {
-// 			File       string
-// 			StoredFile string
-// 		}
+		if VerboseMode {
+			fmt.Printf("%03d: %19s, %4d MB, %s\n", i, mtime, bytes/1000000, file)
+		} else {
+			fmt.Println(file)
+		}
+	}
+}
 
-// 		snapFiles := []SnapshotFile{}
+// Read a snapshot given a file path
+func ReadArchive(archivePrefix string) (Snapshot, error) {
+	archivePath := archivePrefix + ".json"
 
-// 		for _, file := range snap.Files {
-// 			snapFile := SnapshotFile{File: file, StoredFile: snap.StoredFiles[file]}
-// 			snapFiles = append(snapFiles, snapFile)
-// 		}
+	var mySnapshot Snapshot
+	f, err := os.Open(archivePath)
 
-// 		PrintJson(snapFiles)
-// 	} else {
-// 		for _, file := range snap.Files {
-// 			fmt.Println(file)
-// 		}
-// 	}
-// }
+	if err != nil {
+		// panic(fmt.Sprintf("Error: Could not read snapshot file %s", snapshotPath))
+		return Snapshot{}, err
+	}
 
-// func ReadSnapshot(snapId string) Snapshot {
-// 	snapshotPath := filepath.Join(".gover", "snapshots", snapId+".json")
+	defer f.Close()
+	myDecoder := json.NewDecoder(f)
 
-// 	if VerboseMode {
-// 		fmt.Printf("Reading %s\n", snapshotPath)
-// 	}
+	if err := myDecoder.Decode(&mySnapshot); err != nil {
+		fmt.Printf("Error:could not decode archive file %s\n", archivePath)
+		Check(err)
+	}
 
-// 	return ReadSnapshotFile(snapId)
-// }
-
-// // Read a snapshot given a file path
-// func ReadSnapshotFile(snapshotPath string) Snapshot {
-// 	var mySnapshot Snapshot
-// 	f, err := os.Open(snapshotPath)
-
-// 	if err != nil {
-// 		// panic(fmt.Sprintf("Error: Could not read snapshot file %s", snapshotPath))
-// 		return Snapshot{Files: []string{}, StoredFiles: make(map[string]string), ModTimes: make(map[string]string)}
-// 	}
-
-// 	myDecoder := json.NewDecoder(f)
-
-// 	if err := myDecoder.Decode(&mySnapshot); err != nil {
-// 		fmt.Printf("Error:could not decode head file %s\n", snapshotPath)
-// 		check(err)
-// 	}
-
-// 	f.Close()
-// 	return mySnapshot
-// }
+	return mySnapshot, nil
+}
 
 var VerboseMode bool
 
-func init() {
-	flag.BoolVar(&VerboseMode, "verbose", false, "verbose")
-	flag.BoolVar(&VerboseMode, "v", false, "verbose")
+func AddOptionFlags(fs *flag.FlagSet) {
+	fs.BoolVar(&VerboseMode, "verbose", false, "verbose mode")
+	fs.BoolVar(&VerboseMode, "v", false, "verbose mode")
 }
-
-// type Commit struct {
-// 	ID        string
-// 	Branch    string
-// 	Message   string
-// 	Time      string
-// 	ParentIDs []string
-// 	Files     []fileInfo
-// 	ChunkIDs  []string
-// }
 
 func main() {
 	storeCmd := flag.NewFlagSet("store", flag.ExitOnError)
-	// listCmd := flag.NewFlagSet("list", flag.ExitOnError)
+	listCmd := flag.NewFlagSet("list", flag.ExitOnError)
 	// extractCmd := flag.NewFlagSet("extract", flag.ExitOnError)
 
 	flag.Parse()
@@ -231,14 +206,16 @@ func main() {
 	cmd := os.Args[1]
 
 	if cmd == "store" || cmd == "st" || cmd == "s" {
+		AddOptionFlags(storeCmd)
 		storeCmd.Parse(os.Args[2:])
 		archivePath := storeCmd.Arg(0)
 		inputFolder := storeCmd.Arg(1)
 		StoreFolder(archivePath, inputFolder)
-		// } else if cmd == "list" || cmd == "ls" || cmd == "l" {
-		// 	listCmd.Parse(os.Args[2:])
-		// 	archiveFile = commitCmd.Arg(0)
-		// 	ListArchiveContents(archiveFile)
+	} else if cmd == "list" || cmd == "ls" || cmd == "l" {
+		AddOptionFlags(listCmd)
+		listCmd.Parse(os.Args[2:])
+		archivePrefix := listCmd.Arg(0)
+		ListArchiveContents(archivePrefix)
 		// } else if cmd == "extract" || cmd == "ex" || cmd == "e" || cmd == "x" {
 		// 	extractCmd.Parse(os.Args[2:])
 		// 	archiveFile = commitCmd.Arg(0)
