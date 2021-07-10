@@ -88,168 +88,45 @@ func SplitFile(outPrefix string, src string, maxBytes int64) (int, error) {
 	return fileCount, nil
 }
 
-// func ExtractFile(file string, snap Snapshot, in *os.File, dst string) error {
-// 	outputFolder := filepath.Dir(dst)
+func JoinFile(outputPath string, inputPrefix string) error {
+	files, err := filepath.Glob(inputPrefix + ".*.part")
 
-// 	if err := os.MkdirAll(outputFolder, 0777); err != nil {
-// 		if VerboseMode {
-// 			fmt.Printf("Error creating output folder %s\n", outputFolder)
-// 		}
+	if err != nil {
+		if VerboseMode {
+			fmt.Printf("Error listing parts for %s\n", inputPrefix)
+		}
 
-// 		return err
-// 	}
+		return err
+	}
 
-// 	out, err := os.Create(dst)
+	out, err := os.Create(outputPath)
 
-// 	if err != nil {
-// 		if VerboseMode {
-// 			fmt.Printf("Error creating destination file %s:\n", dst)
-// 			fmt.Println(err)
-// 			fmt.Printf("\n")
-// 		}
+	if err != nil {
+		return err
+	}
 
-// 		return err
-// 	}
+	for i := 1; i <= len(files); i++ {
+		src := fmt.Sprintf("%s.%d.part", inputPrefix, i)
+		fmt.Println(src)
 
-// 	defer out.Close()
+		in, err := os.Open(src)
 
-// 	offset := snap.Offsets[file]
-// 	nbytes := snap.Lengths[file]
+		if err != nil {
+			if VerboseMode {
+				fmt.Printf("Error opening part file %s:\n", src)
+				fmt.Println(err)
+			}
 
-// 	if _, err := in.Seek(offset, 0); err != nil {
-// 		if VerboseMode {
-// 			fmt.Println("Error seeking on archive file")
-// 		}
+			return err
+		}
 
-// 		return err
-// 	}
+		defer in.Close()
+		io.Copy(out, in)
 
-// 	if _, err := io.CopyN(out, in, nbytes); err != nil {
-// 		if VerboseMode {
-// 			fmt.Printf("Error copying to destination file %s\n", dst)
-// 			fmt.Println(err)
-// 			fmt.Printf("\n")
-// 		}
+	}
 
-// 		return err
-// 	}
-
-// 	return nil
-// }
-
-// func (snap Snapshot) Write(snapshotPath string) {
-// 	f, err := os.Create(snapshotPath)
-
-// 	if err != nil {
-// 		panic(fmt.Sprintf("Error: Could not create snapshot file %s", snapshotPath))
-// 	}
-
-// 	defer f.Close()
-// 	myEncoder := json.NewEncoder(f)
-// 	myEncoder.SetIndent("", "  ")
-// 	myEncoder.Encode(snap)
-// }
-
-// func StoreFolder(archivePrefix string, workingDirectory string) {
-// 	snap := Snapshot{}
-// 	snap.Files = []string{}
-// 	snap.Offsets = make(map[string]int64)
-// 	snap.Lengths = make(map[string]int64)
-// 	snap.ModTimes = make(map[string]string)
-
-// 	archivePath := archivePrefix + ".dat"
-// 	archiveFile, err := os.Create(archivePath)
-// 	var nbytes int64 = 0
-
-// 	if err != nil {
-// 		fmt.Printf("Error creating archive file %s\n", archivePath)
-// 		return
-// 	}
-
-// 	defer archiveFile.Close()
-
-// 	var VersionFile = func(fileName string, info os.FileInfo, err error) error {
-// 		fileName = strings.TrimSuffix(fileName, "\n")
-
-// 		if info.IsDir() {
-// 			return nil
-// 		}
-
-// 		props, err := os.Stat(fileName)
-
-// 		if err != nil {
-// 			if VerboseMode {
-// 				fmt.Printf("Skipping unreadable file %s\n", fileName)
-// 			}
-
-// 			return nil
-// 		}
-
-// 		fmt.Println(fileName)
-// 		modTime := props.ModTime().Format("2006-01-02T15-04-05")
-// 		snap.Files = append(snap.Files, fileName)
-// 		snap.ModTimes[fileName] = modTime
-// 		snap.Offsets[fileName] = nbytes
-// 		fileBytes, _ := StoreFile(archiveFile, fileName)
-// 		snap.Lengths[fileName] = fileBytes
-// 		nbytes += fileBytes
-// 		return nil
-// 	}
-
-// 	// fmt.Printf("No changes detected in %s for commit %s\n", workDir, snapshot.ID)
-// 	filepath.Walk(workingDirectory, VersionFile)
-// 	snapFile := archivePrefix + ".json"
-// 	snap.Write(snapFile)
-// }
-
-// func ExtractArchive(archivePrefix string, outputFolder string) {
-// 	snap, err := ReadArchive(archivePrefix)
-
-// 	if err != nil {
-// 		fmt.Println("Error reading archive contents")
-// 	}
-
-// 	archivePath := archivePrefix + ".dat"
-// 	archiveFile, err := os.Open(archivePath)
-
-// 	if err != nil {
-// 		fmt.Printf("Cannot open archive file %s\n", archivePath)
-// 		return
-// 	}
-
-// 	defer archiveFile.Close()
-
-// 	for _, file := range snap.Files {
-// 		outPath := filepath.Join(outputFolder, file)
-
-// 		if err := ExtractFile(file, snap, archiveFile, outPath); err == nil {
-// 			fmt.Println(file)
-// 		}
-// 	}
-// }
-
-// // Read a snapshot given a file path
-// func ReadArchive(archivePrefix string) (Snapshot, error) {
-// 	archivePath := archivePrefix + ".json"
-
-// 	var mySnapshot Snapshot
-// 	f, err := os.Open(archivePath)
-
-// 	if err != nil {
-// 		// panic(fmt.Sprintf("Error: Could not read snapshot file %s", snapshotPath))
-// 		return Snapshot{}, err
-// 	}
-
-// 	defer f.Close()
-// 	myDecoder := json.NewDecoder(f)
-
-// 	if err := myDecoder.Decode(&mySnapshot); err != nil {
-// 		fmt.Printf("Error:could not decode archive file %s\n", archivePath)
-// 		Check(err)
-// 	}
-
-// 	return mySnapshot, nil
-// }
+	return out.Close()
+}
 
 var VerboseMode bool
 var Output string
@@ -295,7 +172,7 @@ func main() {
 			outputPath = inputPrefix
 		}
 
-		// JoinFile(outputPath, inputPrefix)
+		JoinFile(outputPath, inputPrefix)
 	} else {
 		fmt.Println("Unknown subcommand")
 		os.Exit(1)
