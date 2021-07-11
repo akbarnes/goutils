@@ -12,8 +12,7 @@ import (
 
 type Snapshot struct {
 	Files     []string
-	ModTimes  map[string]string
-	PackFiles map[string][]string
+	PackNumbers map[string][]int
 	Offsets   map[string][]int64
 	Lengths   map[string][]int64
 }
@@ -115,25 +114,31 @@ func (snap Snapshot) WriteFile(snapshotPath string) error {
 	myEncoder.Encode(snap)
 }
 
+func min64(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 func StoreFolder(archiveFolder string, workingDirectory string, maxPackBytes int64) {
 	snap := Snapshot{}
 	snap.Files = []string{}
-	snap.ModTimes = make(map[string]string)
-	snap.PackFiles = make(map[string][]string)
+	snap.PackNumbers = make(map[string][]int)
 	snap.Offsets = make(map[string][]int64)
 	snap.Lengths = make(map[string][]int64)
 
 	packCount := 1
 	packPath := filepath.Join(archiveFolder, fmt.Sprintf("pack%d.dat", packCount)
 	packFile, err := os.Create(archivePath)
-	var nbytes int64 = 0
+	var currentPackOffset int64 = 0
+	var currentPackBytes int64 = 0
+	var currentPackBytesRemaining int64 = maxPackBytes
 
 	if err != nil {
 		fmt.Printf("Error creating archive file %s\n", archivePath)
 		return
 	}
-
-	defer packFile.Close()
 
 	var VersionFile = func(fileName string, info os.FileInfo, err error) error {
 		fileName = strings.TrimSuffix(fileName, "\n")
@@ -146,20 +151,54 @@ func StoreFolder(archiveFolder string, workingDirectory string, maxPackBytes int
 
 		if err != nil {
 			if VerboseMode {
-				fmt.Printf("Skipping unreadable file %s\n", fileName)
+				fmt.Printf("Can't stat file %s, skipping\n", fileName)
 			}
 
-			return nil
+			return err
 		}
+
+		in, err := os.Open(src)
+
+		if err != nil {
+			if VerboseMode {
+				fmt.Printf("Can't open file %s for reading, skipping\n", fileName)
+			}
+
+			return err
+		}
+	
+		defer in.Close()		
 
 		fmt.Println(fileName)
 		modTime := props.ModTime().Format("2006-01-02T15-04-05")
+		fileBytesRemaining := props.Size()
+		fileBytesCopied := 0
+
 		snap.Files = append(snap.Files, fileName)
-		snap.ModTimes[fileName] = modTime
-		snap.Offsets[fileName] = nbytes
-		fileBytes, _ := StoreFile(archiveFile, fileName)
-		snap.Lengths[fileName] = fileBytes
-		nbytes += fileBytes
+		filePackCount := 0
+
+		snap.PackNumbers[fileName] = []int{packCount}
+		snap.Offsets[fileName] = []int64{currentPackOffset}
+
+		for fileBytesRemaining > 0 {
+			copyBytes := min64(currentPackBytesRemaining, fileBytesRemaining)
+			bytesCopied, err := io.CopyN(packFile, in, copyBytes)
+
+			if err == nil {
+				fileBytesRemaining -= bytesCopied
+				fileBytesCopied += bytesCopied
+				currentPackBytesRemaining -= bytesCopied
+				currentPackBytes += bytesCopied
+			} else {
+				if VerboseMode {
+					fmt.Printf("Error writing file %s to pack %s, aborting\n", fileName, packPath)
+				}
+
+				return err
+			}
+		}
+
+
 		return nil
 	}
 
