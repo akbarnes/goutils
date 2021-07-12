@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -22,26 +21,6 @@ func Check(e error) {
 	if e != nil {
 		panic(e)
 	}
-}
-
-// Copy the source file to a destination file. Any existing file
-// will be overwritten and will not copy file attributes.
-func StoreFile(out *os.File, src string) (int64, error) {
-	in, err := os.Open(src)
-
-	if err != nil {
-		return 0, err
-	}
-
-	defer in.Close()
-
-	nbytes, err := io.Copy(out, in)
-
-	if err != nil {
-		return 0, err
-	}
-
-	return nbytes, nil
 }
 
 func (snap Snapshot) Write(archiveFolder string) error {
@@ -152,11 +131,10 @@ func StoreFolder(archiveFolder string, workingDirectory string, maxPackBytes int
 			if err == nil {
 				fileBytesRemaining -= bytesCopied
 				packBytesRemaining -= bytesCopied
-				packOffset += bytesCopied
-
 				snap.PackNumbers[fileName] = append(snap.PackNumbers[fileName], packCount)
 				snap.Offsets[fileName] = append(snap.Offsets[fileName], packOffset)
 				snap.Lengths[fileName] = append(snap.Lengths[fileName], bytesCopied)
+				packOffset += bytesCopied
 			} else {
 				if VerboseMode {
 					fmt.Printf("Error writing file %s to pack %s, aborting\n", fileName, packPath)
@@ -253,7 +231,7 @@ func ExtractFile(file string, archiveFolder string, snap Snapshot, dst string) e
 	}
 
 	defer out.Close()
-	w := bufio.NewWriter(out)
+	// w := bufio.NewWriter(out)
 
 	for i, packNum := range snap.PackNumbers[file] {
 		offset := snap.Offsets[file][i]
@@ -278,9 +256,8 @@ func ExtractFile(file string, archiveFolder string, snap Snapshot, dst string) e
 			return err
 		}
 
-		// if _, err := io.CopyN(out, in, nbytes); err != nil {
-
-		if wb, err := w.WriteString("buffered\n"); err != nil {
+		if _, err := io.CopyN(out, in, nbytes); err != nil {
+			// if wb, err := w.WriteString("buffered\n"); err != nil {
 			if VerboseMode {
 				fmt.Printf("\nError copying %d bytes from pack %s starting at %d bytes to destination file %s\n", nbytes, packPath, offset, dst)
 				fmt.Println(err)
@@ -288,15 +265,16 @@ func ExtractFile(file string, archiveFolder string, snap Snapshot, dst string) e
 			}
 
 			return err
-		} else {
-			if VerboseMode {
-				fmt.Printf("Wrote %d bytes\n", wb)
-			}
 		}
+		// else {
+		// 	if VerboseMode {
+		// 		fmt.Printf("Wrote %d bytes\n", wb)
+		// 	}
+		// }
 
 	}
 
-	w.Flush()
+	// w.Flush()
 	return nil
 }
 
