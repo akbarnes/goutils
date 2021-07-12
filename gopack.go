@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -42,55 +43,6 @@ func StoreFile(out *os.File, src string) (int64, error) {
 
 	return nbytes, nil
 }
-
-// func ExtractFile(file string, snap Snapshot, in *os.File, dst string) error {
-// 	outputFolder := filepath.Dir(dst)
-
-// 	if err := os.MkdirAll(outputFolder, 0777); err != nil {
-// 		if VerboseMode {
-// 			fmt.Printf("Error creating output folder %s\n", outputFolder)
-// 		}
-
-// 		return err
-// 	}
-
-// 	out, err := os.Create(dst)
-
-// 	if err != nil {
-// 		if VerboseMode {
-// 			fmt.Printf("Error creating destination file %s:\n", dst)
-// 			fmt.Println(err)
-// 			fmt.Printf("\n")
-// 		}
-
-// 		return err
-// 	}
-
-// 	defer out.Close()
-
-// 	offset := snap.Offsets[file]
-// 	nbytes := snap.Lengths[file]
-
-// 	if _, err := in.Seek(offset, 0); err != nil {
-// 		if VerboseMode {
-// 			fmt.Println("Error seeking on archive file")
-// 		}
-
-// 		return err
-// 	}
-
-// 	if _, err := io.CopyN(out, in, nbytes); err != nil {
-// 		if VerboseMode {
-// 			fmt.Printf("Error copying to destination file %s\n", dst)
-// 			fmt.Println(err)
-// 			fmt.Printf("\n")
-// 		}
-
-// 		return err
-// 	}
-
-// 	return nil
-// }
 
 func (snap Snapshot) Write(archiveFolder string) error {
 	snapshotPath := filepath.Join(archiveFolder, "snapshot.json")
@@ -246,31 +198,107 @@ func StoreFolder(archiveFolder string, workingDirectory string, maxPackBytes int
 	return nil
 }
 
-// func ExtractArchive(archivePrefix string, outputFolder string) {
-// 	snap, err := ReadArchive(archivePrefix)
+func ExtractArchive(archiveFolder string, outputFolder string) error {
+	snap, err := ReadSnapshot(archiveFolder)
 
-// 	if err != nil {
-// 		fmt.Println("Error reading archive contents")
-// 	}
+	if err != nil {
+		fmt.Println("Error reading archive contents")
+	}
 
-// 	archivePath := archivePrefix + ".dat"
-// 	archiveFile, err := os.Open(archivePath)
+	if err := os.MkdirAll(outputFolder, 0777); err != nil {
+		if VerboseMode {
+			fmt.Printf("Error creating output folder %s\n", outputFolder)
+		}
 
-// 	if err != nil {
-// 		fmt.Printf("Cannot open archive file %s\n", archivePath)
-// 		return
-// 	}
+		return err
+	}
 
-// 	defer archiveFile.Close()
+	for _, file := range snap.Files {
+		outPath := filepath.Join(outputFolder, file)
 
-// 	for _, file := range snap.Files {
-// 		outPath := filepath.Join(outputFolder, file)
+		if err := ExtractFile(file, archiveFolder, snap, outPath); err == nil {
+			fmt.Println(file)
+		}
+		// else {
+		// 	if VerboseMode {
+		// 		fmt.Printf("Error extracting %s to %s\n", file, outPath)
+		// 	}
+		// }
+	}
 
-// 		if err := ExtractFile(file, snap, archiveFile, outPath); err == nil {
-// 			fmt.Println(file)
-// 		}
-// 	}
-// }
+	return nil
+}
+
+func ExtractFile(file string, archiveFolder string, snap Snapshot, dst string) error {
+	outputFolder := filepath.Dir(dst)
+
+	if err := os.MkdirAll(outputFolder, 0777); err != nil {
+		if VerboseMode {
+			fmt.Printf("Error creating output folder %s\n", outputFolder)
+		}
+
+		return err
+	}
+
+	out, err := os.Create(dst)
+
+	if err != nil {
+		if VerboseMode {
+			fmt.Printf("Error creating destination file %s:\n", dst)
+			fmt.Println(err)
+			fmt.Printf("\n")
+		}
+
+		return err
+	}
+
+	defer out.Close()
+	w := bufio.NewWriter(out)
+
+	for i, packNum := range snap.PackNumbers[file] {
+		offset := snap.Offsets[file][i]
+		nbytes := snap.Lengths[file][i]
+		packPath := filepath.Join(archiveFolder, fmt.Sprintf("pack%d.dat", packNum))
+		in, err := os.Open(packPath)
+		defer in.Close()
+
+		if err != nil {
+			if VerboseMode {
+				fmt.Println("Could not open pack file %s", packPath)
+			}
+
+			return err
+		}
+
+		if _, err := in.Seek(offset, 0); err != nil {
+			if VerboseMode {
+				fmt.Printf("Error seeking on pack file %s\n", packPath)
+			}
+
+			return err
+		}
+
+		// if _, err := io.CopyN(out, in, nbytes); err != nil {
+
+		if wb, err := w.WriteString("buffered\n"); err != nil {
+			if VerboseMode {
+				fmt.Printf("\nError copying %d bytes from pack %s starting at %d bytes to destination file %s\n", nbytes, packPath, offset, dst)
+				fmt.Println(err)
+				fmt.Printf("\n")
+			}
+
+			return err
+		} else {
+			if VerboseMode {
+				fmt.Printf("Wrote %d bytes\n", wb)
+			}
+		}
+
+	}
+
+	w.Flush()
+	return nil
+}
 
 func Sum64(a []int64) int64 {
 	var s int64 = 0
@@ -282,11 +310,12 @@ func Sum64(a []int64) int64 {
 	return s
 }
 
-func ListArchiveContents(archiveFolder string) {
-	snap, err := ReadArchive(archiveFolder)
+func ListArchiveContents(archiveFolder string) error {
+	snap, err := ReadSnapshot(archiveFolder)
 
 	if err != nil {
 		fmt.Println("Error reading archive contents")
+		return err
 	}
 
 	for i, file := range snap.Files {
@@ -299,10 +328,12 @@ func ListArchiveContents(archiveFolder string) {
 			fmt.Println(file)
 		}
 	}
+
+	return nil
 }
 
 // Read a snapshot given a file path
-func ReadArchive(archiveFolder string) (Snapshot, error) {
+func ReadSnapshot(archiveFolder string) (Snapshot, error) {
 	snapshotPath := filepath.Join(archiveFolder, "snapshot.json")
 
 	var mySnapshot Snapshot
@@ -334,7 +365,7 @@ func AddOptionFlags(fs *flag.FlagSet) {
 func main() {
 	storeCmd := flag.NewFlagSet("store", flag.ExitOnError)
 	listCmd := flag.NewFlagSet("list", flag.ExitOnError)
-	// extractCmd := flag.NewFlagSet("extract", flag.ExitOnError)
+	extractCmd := flag.NewFlagSet("extract", flag.ExitOnError)
 
 	flag.Parse()
 
@@ -354,14 +385,14 @@ func main() {
 	} else if cmd == "list" || cmd == "ls" || cmd == "l" {
 		AddOptionFlags(listCmd)
 		listCmd.Parse(os.Args[2:])
-		archivePrefix := listCmd.Arg(0)
-		ListArchiveContents(archivePrefix)
-		// } else if cmd == "extract" || cmd == "ex" || cmd == "e" || cmd == "x" {
-		// 	AddOptionFlags(extractCmd)
-		// 	extractCmd.Parse(os.Args[2:])
-		// 	archivePrefix := extractCmd.Arg(0)
-		// 	outputFolder := extractCmd.Arg(1)
-		// 	ExtractArchive(archivePrefix, outputFolder)
+		archiveFolder := listCmd.Arg(0)
+		ListArchiveContents(archiveFolder)
+	} else if cmd == "extract" || cmd == "ex" || cmd == "e" || cmd == "x" {
+		AddOptionFlags(extractCmd)
+		extractCmd.Parse(os.Args[2:])
+		archiveFolder := extractCmd.Arg(0)
+		outputFolder := extractCmd.Arg(1)
+		ExtractArchive(archiveFolder, outputFolder)
 	} else {
 		fmt.Println("Unknown subcommand")
 		os.Exit(1)
