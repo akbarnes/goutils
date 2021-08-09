@@ -2,27 +2,27 @@ package main
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/bmatcuk/doublestar/v4"
 	"io"
 	"io/ioutil"
 	"os"
-	"time"
-	"strings"
-	"strconv"
 	"path/filepath"
-	"encoding/json"
-	"github.com/bmatcuk/doublestar/v4"
+	"strconv"
+	"strings"
+	"time"
 )
 
 const NumChars = 40
 
 type Snapshot struct {
-	Message       string
-	Time          string
-	Files	      []string
-	StoredFiles	  map[string]string
-	ModTimes	  map[string]string
+	Message     string
+	Time        string
+	Files       []string
+	StoredFiles map[string]string
+	ModTimes    map[string]string
 }
 
 func check(e error) {
@@ -106,7 +106,7 @@ func ReadHead() Snapshot {
 
 	f.Close()
 
-	snapshotPath := filepath.Join(".gover", "snapshots", snapshotId + ".json")
+	snapshotPath := filepath.Join(".gover", "snapshots", snapshotId+".json")
 	return ReadSnapshotFile(snapshotPath)
 }
 
@@ -121,7 +121,6 @@ func (snap Snapshot) Write(snapshotPath string) {
 	myEncoder.Encode(snap)
 	f.Close()
 }
-
 
 func CommitSnapshot(message string, filters []string) {
 	// Optional timestamp
@@ -177,8 +176,8 @@ func CommitSnapshot(message string, filters []string) {
 			return hashErr
 		}
 
-		verFolder := filepath.Join(".gover", "data", hash[0:2]) 
-		verFile := filepath.Join(verFolder, hash + ext)
+		verFolder := filepath.Join(".gover", "data", hash[0:2])
+		verFile := filepath.Join(verFolder, hash+ext)
 
 		props, err := os.Stat(fileName)
 
@@ -191,8 +190,6 @@ func CommitSnapshot(message string, filters []string) {
 		}
 
 		modTime := props.ModTime().Format("2006-01-02T15-04-05")
-
-
 
 		snap.Files = append(snap.Files, fileName)
 		snap.StoredFiles[fileName] = verFile
@@ -209,7 +206,7 @@ func CommitSnapshot(message string, filters []string) {
 
 			if !JsonMode {
 				if VerboseMode {
-						fmt.Printf("%s -> %s\n", fileName, verFile)
+					fmt.Printf("%s -> %s\n", fileName, verFile)
 				} else {
 					fmt.Println(fileName)
 				}
@@ -228,9 +225,89 @@ func CommitSnapshot(message string, filters []string) {
 
 	snapFolder := filepath.Join(".gover", "snapshots")
 	os.MkdirAll(snapFolder, 0777)
-	snapFile := filepath.Join(snapFolder, ts + ".json")
+	snapFile := filepath.Join(snapFolder, ts+".json")
 	snap.Write(snapFile)
 	WriteHead(ts)
+}
+
+func DiffHead(filters []string) {
+	workingDirectory := "."
+	head := ReadHead()
+
+	filePresent := make(map[string]bool)
+
+	for _, file := range head.Files {
+		filePresent[file] = false
+	}
+
+	goverDir := filepath.Join(workingDirectory, ".gover", "**")
+
+	var DiffFile = func(fileName string, info os.FileInfo, err error) error {
+		fileName = strings.TrimSuffix(fileName, "\n")
+
+		if info.IsDir() {
+			return nil
+		}
+
+		matched, err := doublestar.PathMatch(goverDir, fileName)
+
+		if matched {
+			if VerboseMode {
+				fmt.Printf("Skipping file %s in .gover\n", fileName)
+			}
+
+			return nil
+		}
+
+		for _, pattern := range filters {
+			matched, err := doublestar.PathMatch(pattern, fileName)
+
+			check(err)
+			if matched {
+				if VerboseMode {
+					fmt.Printf("Skipping file %s which matches with %s\n", fileName, pattern)
+				}
+
+				return nil
+			}
+		}
+
+		props, err := os.Stat(fileName)
+
+		if err != nil {
+			if VerboseMode {
+				fmt.Printf("Skipping unreadable file %s\n", fileName)
+			}
+
+			return nil
+		}
+
+		modTime := props.ModTime().Format("2006-01-02T15-04-05")
+		filePresent[fileName] = true
+
+		if headModTime, ok := head.ModTimes[fileName]; ok {
+			if modTime == headModTime {
+				if VerboseMode {
+					fmt.Printf("= %s\n", fileName)
+				}
+			} else {
+				fmt.Printf("M %s\n", fileName)
+			}
+		} else {
+			fmt.Printf("+ %s\n", fileName)
+		}
+
+		return nil
+	}
+
+	// fmt.Printf("No changes detected in %s for commit %s\n", workDir, snapshot.ID)
+	filepath.Walk(workingDirectory, DiffFile)
+
+	for file, isPresent := range filePresent {
+		if !isPresent {
+			fmt.Printf("- %s\n", file)
+		}
+	}
 }
 
 func CheckoutSnaphot(snapId string, outputFolder string) {
@@ -239,7 +316,7 @@ func CheckoutSnaphot(snapId string, outputFolder string) {
 	}
 
 	fmt.Printf("Checking out %s\n", snapId)
-	snapshotPath := filepath.Join(".gover","snapshots", snapId+".json")
+	snapshotPath := filepath.Join(".gover", "snapshots", snapId+".json")
 	fmt.Printf("Reading %s\n", snapshotPath)
 	snap := ReadSnapshotFile(snapshotPath)
 
@@ -267,20 +344,20 @@ func LogSingleSnapshot(snapshotNum int) {
 	snapshotPaths, err := filepath.Glob(snapshotGlob)
 	check(err)
 
-	snapshotPath := snapshotPaths[snapshotNum - 1]
+	snapshotPath := snapshotPaths[snapshotNum-1]
 
 	snap := ReadSnapshotFile(snapshotPath)
 
 	if JsonMode {
 		type SnapshotFile struct {
-			File string
+			File       string
 			StoredFile string
 		}
 
 		snapFiles := []SnapshotFile{}
 
 		for _, file := range snap.Files {
-			snapFile := SnapshotFile{File: file, StoredFile:snap.StoredFiles[file]}
+			snapFile := SnapshotFile{File: file, StoredFile: snap.StoredFiles[file]}
 			snapFiles = append(snapFiles, snapFile)
 		}
 
@@ -288,20 +365,20 @@ func LogSingleSnapshot(snapshotNum int) {
 	} else {
 		for _, file := range snap.Files {
 			fmt.Println(file)
-		}		
-	}	
+		}
+	}
 }
 
 func LogAllSnapshots() {
 	if JsonMode {
 		type Snap struct {
-			Time string
+			Time    string
 			Message string
 		}
 
 		snaps := []Snap{}
-		
-		snapshotGlob := filepath.Join(".gover","snapshots","*.json")
+
+		snapshotGlob := filepath.Join(".gover", "snapshots", "*.json")
 		snapshotPaths, err := filepath.Glob(snapshotGlob)
 		check(err)
 
@@ -321,7 +398,7 @@ func LogAllSnapshots() {
 			snap := ReadSnapshotFile(snapshotPath)
 			// Time: 2021/05/08 08:57:46
 			// Message: specify workdir path explicitly
-			fmt.Printf("%3d) Time: %s\n", i + 1, snap.Time)
+			fmt.Printf("%3d) Time: %s\n", i+1, snap.Time)
 
 			if len(snap.Message) > 0 {
 				fmt.Printf("Message: %s\n\n", snap.Message)
@@ -380,6 +457,7 @@ func ReadFilters() []string {
 
 var LogCommand bool
 var CheckoutCommand bool
+var DiffCommand bool
 var JsonMode bool
 var Message string
 var CommitCommand bool
@@ -389,17 +467,18 @@ var VerboseMode bool
 func init() {
 	flag.BoolVar(&LogCommand, "log", false, "list snapshots")
 	flag.BoolVar(&CommitCommand, "commit", false, "commit snapshot")
-	flag.BoolVar(&CommitCommand, "ci", false, "commit snapshot")	
-	flag.BoolVar(&CheckoutCommand, "checkout", false,"checkout snapshot")
-	flag.BoolVar(&CheckoutCommand, "co", false,"checkout snapshot")
+	flag.BoolVar(&CommitCommand, "ci", false, "commit snapshot")
+	flag.BoolVar(&DiffCommand, "diff", false, "diff head")
+	flag.BoolVar(&CheckoutCommand, "checkout", false, "checkout snapshot")
+	flag.BoolVar(&CheckoutCommand, "co", false, "checkout snapshot")
 	flag.BoolVar(&JsonMode, "json", false, "print json")
 	flag.BoolVar(&JsonMode, "j", false, "print json")
 	flag.StringVar(&Message, "msg", "", "commit message")
 	flag.StringVar(&Message, "m", "", "commit message")
 	flag.StringVar(&OutputFolder, "out", "", "output folder")
-	flag.StringVar(&OutputFolder, "o", "", "output folder")	
+	flag.StringVar(&OutputFolder, "o", "", "output folder")
 	flag.BoolVar(&VerboseMode, "verbose", false, "verbose")
-	flag.BoolVar(&VerboseMode, "v", false, "verbose")	
+	flag.BoolVar(&VerboseMode, "v", false, "verbose")
 }
 
 // type Commit struct {
@@ -422,6 +501,9 @@ func main() {
 		} else {
 			LogAllSnapshots()
 		}
+	} else if DiffCommand {
+		filters := ReadFilters()
+		DiffHead(filters)
 	} else if CheckoutCommand {
 		CheckoutSnaphot(flag.Arg(0), OutputFolder)
 	} else {
@@ -429,4 +511,3 @@ func main() {
 		CommitSnapshot(Message, filters)
 	}
 }
-
