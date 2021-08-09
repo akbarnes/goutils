@@ -31,6 +31,9 @@ Calculate the SHA256 hash of a file
 ## GoVer
 This is a much simplified version of [dupver](https://github.com/akbarnes/dupver/) that uses a local repository and file-level deduplication. There are only three commands `commit`, `log`, and `checkout`. 
 
+This has been moved to its own repo: [https://github.com/akbarnes/gover](https://github.com/akbarnes/gover)
+
+
 To build:
 ```
 go mod init goutils
