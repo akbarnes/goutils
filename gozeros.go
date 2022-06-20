@@ -9,7 +9,7 @@ import (
 
 // Given a filename, create a random text file
 // with the specified number of lines and column width
-func WriteZeroBytes(numBytes int, fileName string) {
+func WriteZeroBytes(MB int, fileName string) {
 	fo, err := os.Create(fileName)
 	defer fo.Close()
 
@@ -18,15 +18,16 @@ func WriteZeroBytes(numBytes int, fileName string) {
 		os.Exit(1)
 	}
 
-	for i := 0; i < numBytes; i++ {
-		if err := binary.Write(fo, binary.LittleEndian, uint8(0)); err != nil {
-			fmt.Fprintf(os.Stderr, "Unable to write byte, aborting: %v\n", err)
+	bytes := make([]uint8, 1000*1000)
+
+	for i := 0; i < MB; i++ {
+		if err := binary.Write(fo, binary.LittleEndian, bytes); err != nil {
+			fmt.Fprintf(os.Stderr, "Unable to write bytes, aborting: %v\n", err)
 			os.Exit(1)
 		}
 
-		if i%(1000*1000) == 0 {
-			MB := i / (1000 * 1000)
-			fmt.Fprintf(os.Stderr, "%03d MB\n", MB)
+		if i%1000 == 0 {
+			fmt.Fprintf(os.Stderr, "%06d GB\n", i)
 		}
 	}
 }
@@ -40,12 +41,11 @@ func main() {
 	MB, err := strconv.Atoi(os.Args[1])
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Could not parse number of bytes: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Could not parse number of MB: %v\n", err)
 		os.Exit(1)
 	}
 
-	NumBytes := 1000 * 1000 * MB
 	FileName := os.Args[2]
 
-	WriteZeroBytes(NumBytes, FileName)
+	WriteZeroBytes(MB, FileName)
 }

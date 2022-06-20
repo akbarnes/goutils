@@ -17,3 +17,4 @@
 calendar.toml
 meetings.csv
 *.orig
+*.bin
